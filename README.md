@@ -42,6 +42,7 @@
     ```sh
     export OPENAI_API_KEY='your-openai-api-key'  # Unix or MacOS
     set OPENAI_API_KEY='your-openai-api-key'  # Windows
+    $env:OPENAI_API_KEY="your_api_key_here" # Windows PowerShell
     ```
 
 ## Usage
