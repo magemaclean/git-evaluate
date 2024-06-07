@@ -1,10 +1,11 @@
 import argparse
 import os
+import json
 from openai import OpenAI
 import git
 from rich.console import Console
 from rich.table import Table
-from utils import get_commit_diff, save_evaluation, generate_summary
+from utils import get_commit_diff, save_json_evaluation, generate_summary
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 console = Console()
@@ -75,6 +76,23 @@ def display_evaluation(evaluation):
     console.print("[bold green]Evaluation Result:[/bold green]")
     console.print(evaluation)
 
+def save_json_evaluation(commit, evaluation, target_dir):
+    eval_data = {
+        "hash": commit.hexsha,
+        "author": commit.author.name,
+        "email": commit.author.email,
+        "date": str(commit.committed_datetime),
+        "message": commit.message.strip(),
+        "diff": get_commit_diff(commit),
+        "evaluation": evaluation
+    }
+    eval_dir = os.path.join(target_dir, '.git-evaluate')
+    if not os.path.exists(eval_dir):
+        os.makedirs(eval_dir)
+    eval_file = os.path.join(eval_dir, f"{commit.hexsha}.json")
+    with open(eval_file, 'w') as f:
+        json.dump(eval_data, f, indent=4)
+
 def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, author):
     available_commits = [commit.hexsha for commit in repo.iter_commits(branch, author=author)]
 
@@ -93,7 +111,7 @@ def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, autho
 
     evaluation = get_openai_evaluation(commit.message, commit_diff, message)
     display_evaluation(evaluation)
-    save_evaluation(commit.hexsha, evaluation, target_dir)
+    save_json_evaluation(commit, evaluation, target_dir)
 
 def evaluate_last_commit(repo, message, target_dir, branch, author):
     try:
@@ -106,7 +124,7 @@ def evaluate_last_commit(repo, message, target_dir, branch, author):
 
     evaluation = get_openai_evaluation(commit.message, commit_diff, message)
     display_evaluation(evaluation)
-    save_evaluation(commit.hexsha, evaluation, target_dir)
+    save_json_evaluation(commit, evaluation, target_dir)
 
 def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, author):
     try:
@@ -120,7 +138,7 @@ def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_c
 
         evaluation = get_openai_evaluation(commit.message, commit_diff, message)
         display_evaluation(evaluation)
-        save_evaluation(commit.hexsha, evaluation, target_dir)
+        save_json_evaluation(commit, evaluation, target_dir)
 
 def evaluate_all_commits(repo, message, target_dir, branch, author):
     for commit in repo.iter_commits(branch, author=author):
@@ -129,7 +147,7 @@ def evaluate_all_commits(repo, message, target_dir, branch, author):
 
         evaluation = get_openai_evaluation(commit.message, commit_diff, message)
         display_evaluation(evaluation)
-        save_evaluation(commit.hexsha, evaluation, target_dir)
+        save_json_evaluation(commit, evaluation, target_dir)
 
 def get_openai_evaluation(commit_message, commit_diff, message):
     response = client.chat.completions.create(

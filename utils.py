@@ -1,5 +1,6 @@
 import os
 import json
+import git
 
 def get_commit_diff(commit):
     parent = commit.parents[0] if commit.parents else None
@@ -12,13 +13,22 @@ def get_commit_diff(commit):
             diffs.append(d.diff.decode('latin-1'))
     return '\n'.join(diffs)
 
-def save_evaluation(commit_hash, evaluation, target_dir):
+def save_json_evaluation(commit, evaluation, target_dir):
+    eval_data = {
+        "hash": commit.hexsha,
+        "author": commit.author.name,
+        "email": commit.author.email,
+        "date": str(commit.committed_datetime),
+        "message": commit.message.strip(),
+        "diff": get_commit_diff(commit),
+        "evaluation": evaluation
+    }
     eval_dir = os.path.join(target_dir, '.git-evaluate')
     if not os.path.exists(eval_dir):
         os.makedirs(eval_dir)
-    eval_file = os.path.join(eval_dir, f"{commit_hash}.txt")
+    eval_file = os.path.join(eval_dir, f"{commit.hexsha}.json")
     with open(eval_file, 'w') as f:
-        f.write(evaluation)
+        json.dump(eval_data, f, indent=4)
 
 def generate_summary(target_dir):
     eval_dir = os.path.join(target_dir, '.git-evaluate')
@@ -26,14 +36,10 @@ def generate_summary(target_dir):
     evaluations = []
 
     for filename in os.listdir(eval_dir):
-        if filename.endswith(".txt"):
-            commit_hash = filename.replace(".txt", "")
+        if filename.endswith(".json"):
             with open(os.path.join(eval_dir, filename), 'r') as f:
-                evaluation = f.read()
-            evaluations.append({
-                "commit_hash": commit_hash,
-                "evaluation": evaluation
-            })
+                evaluation = json.load(f)
+            evaluations.append(evaluation)
 
     with open(summary_file, 'w') as f:
         json.dump(evaluations, f, indent=4)
