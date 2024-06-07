@@ -13,7 +13,7 @@ console = Console()
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate git commits using OpenAI.')
-    parser.add_argument('--evaluate', required=True, help='Evaluate all commits, a specific commit by its hash, a range of commits (start_hash:end_hash), or the last commit.')
+    parser.add_argument('--evaluate', required=True, help='Evaluate all commits, a specific commit by its hash, a range of commits (start_hash:end_hash), or the last commit(s).')
     parser.add_argument('--message', required=True, help='Prompt message for the evaluation.')
     parser.add_argument('--target-dir', required=True, help='Target directory containing the git repository.')
     parser.add_argument('--branch', required=False, help='Branch to evaluate commits from.')
@@ -54,6 +54,9 @@ def main():
     try:
         if args.evaluate == 'all':
             evaluate_all_commits(repo, args.message, args.target_dir, branch, args.author)
+        elif args.evaluate.startswith('last:'):
+            n = int(args.evaluate.split(':')[1])
+            evaluate_last_n_commits(repo, args.message, args.target_dir, branch, args.author, n)
         elif args.evaluate == 'last':
             evaluate_last_commit(repo, args.message, args.target_dir, branch, args.author)
         elif ':' in args.evaluate:
@@ -137,6 +140,22 @@ def evaluate_last_commit(repo, message, target_dir, branch, author):
     evaluation = get_openai_evaluation(commit.message, commit_diff, message)
     display_evaluation(evaluation)
     save_json_evaluation(commit, evaluation, target_dir)
+
+def evaluate_last_n_commits(repo, message, target_dir, branch, author, n):
+    try:
+        commits = list(repo.iter_commits(branch, max_count=n, author=author))
+        if not commits:
+            raise ValueError(f"No commits found in the branch {branch} by the specified author.")
+    except git.exc.GitCommandError as e:
+        raise ValueError(f"An error occurred while retrieving the last {n} commits: {e}")
+
+    for commit in commits:
+        display_commit_info(commit)
+        commit_diff = get_commit_diff(commit)
+
+        evaluation = get_openai_evaluation(commit.message, commit_diff, message)
+        display_evaluation(evaluation)
+        save_json_evaluation(commit, evaluation, target_dir)
 
 def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, author):
     try:
