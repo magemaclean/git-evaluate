@@ -5,6 +5,7 @@ from openai import OpenAI
 import git
 from rich.console import Console
 from rich.table import Table
+from rich.panel import Panel
 from utils import get_commit_diff, save_json_evaluation, generate_summary
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -23,15 +24,18 @@ def main():
 
     # Check if OpenAI API key is set
     if not client.api_key:
-        raise ValueError("OPENAI_API_KEY environment variable not set.")
+        console.print("[bold red]Error:[/bold red] OPENAI_API_KEY environment variable not set.")
+        return
 
     # Get the git repository from the target directory
     try:
         repo = git.Repo(args.target_dir, search_parent_directories=False)
     except git.exc.InvalidGitRepositoryError:
-        raise ValueError(f"The directory {args.target_dir} is not a valid git repository.")
+        console.print(f"[bold red]Error:[/bold red] The directory {args.target_dir} is not a valid git repository.")
+        return
     except Exception as e:
-        raise ValueError(f"An error occurred while accessing the repository: {e}")
+        console.print(f"[bold red]Error:[/bold red] An error occurred while accessing the repository: {e}")
+        return
 
     console.print(f"[bold blue]Using repository:[/bold blue] {repo.working_dir}")
     branch = args.branch
@@ -42,19 +46,27 @@ def main():
             branches = [head.name for head in repo.heads]
             branch = branches[0] if branches else None
             if branch is None:
-                raise ValueError("No branches found in the repository.")
+                console.print("[bold red]Error:[/bold red] No branches found in the repository.")
+                return
 
     console.print(f"[bold blue]Using branch:[/bold blue] {branch}")
 
-    if args.evaluate == 'all':
-        evaluate_all_commits(repo, args.message, args.target_dir, branch, args.author)
-    elif args.evaluate == 'last':
-        evaluate_last_commit(repo, args.message, args.target_dir, branch, args.author)
-    elif ':' in args.evaluate:
-        start_commit, end_commit = args.evaluate.split(':')
-        evaluate_commit_range(repo, args.message, args.target_dir, branch, start_commit, end_commit, args.author)
-    else:
-        evaluate_specific_commit(repo, args.message, args.target_dir, branch, args.evaluate, args.author)
+    try:
+        if args.evaluate == 'all':
+            evaluate_all_commits(repo, args.message, args.target_dir, branch, args.author)
+        elif args.evaluate == 'last':
+            evaluate_last_commit(repo, args.message, args.target_dir, branch, args.author)
+        elif ':' in args.evaluate:
+            start_commit, end_commit = args.evaluate.split(':')
+            evaluate_commit_range(repo, args.message, args.target_dir, branch, start_commit, end_commit, args.author)
+        else:
+            evaluate_specific_commit(repo, args.message, args.target_dir, branch, args.evaluate, args.author)
+    except ValueError as ve:
+        console.print(Panel(f"[bold red]ValueError:[/bold red] {ve}", title="Error", subtitle="Please check your input"))
+    except git.exc.GitCommandError as gce:
+        console.print(Panel(f"[bold red]GitCommandError:[/bold red] {gce}", title="Error", subtitle="Git command issue"))
+    except Exception as e:
+        console.print(Panel(f"[bold red]Unexpected Error:[/bold red] {e}", title="Error", subtitle="An unexpected error occurred"))
 
     if args.summary:
         generate_summary(args.target_dir)
