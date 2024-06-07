@@ -2,9 +2,12 @@ import argparse
 import os
 from openai import OpenAI
 import git
+from rich.console import Console
+from rich.table import Table
 from utils import get_commit_diff, save_evaluation, generate_summary
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+console = Console()
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate git commits using OpenAI.')
@@ -29,7 +32,7 @@ def main():
     except Exception as e:
         raise ValueError(f"An error occurred while accessing the repository: {e}")
 
-    print(f"Using repository: {repo.working_dir}")
+    console.print(f"[bold blue]Using repository:[/bold blue] {repo.working_dir}")
     branch = args.branch
     if not branch:
         try:
@@ -40,7 +43,7 @@ def main():
             if branch is None:
                 raise ValueError("No branches found in the repository.")
 
-    print(f"Using branch: {branch}")
+    console.print(f"[bold blue]Using branch:[/bold blue] {branch}")
 
     if args.evaluate == 'all':
         evaluate_all_commits(repo, args.message, args.target_dir, branch, args.author)
@@ -55,8 +58,24 @@ def main():
     if args.summary:
         generate_summary(args.target_dir)
 
+def display_commit_info(commit):
+    table = Table(title="Commit Information")
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Hash", commit.hexsha)
+    table.add_row("Author", commit.author.name)
+    table.add_row("Email", commit.author.email)
+    table.add_row("Date", str(commit.committed_datetime))
+    table.add_row("Message", commit.message.strip())
+
+    console.print(table)
+
+def display_evaluation(evaluation):
+    console.print("[bold green]Evaluation Result:[/bold green]")
+    console.print(evaluation)
+
 def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, author):
-    # Log all available commit hashes in the specified branch
     available_commits = [commit.hexsha for commit in repo.iter_commits(branch, author=author)]
 
     if commit_id not in available_commits:
@@ -69,23 +88,24 @@ def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, autho
     except Exception as e:
         raise ValueError(f"An error occurred while retrieving the commit {commit_id}: {e}")
     
-    commit_message = commit.message
+    display_commit_info(commit)
     commit_diff = get_commit_diff(commit)
 
-    evaluation = get_openai_evaluation(commit_message, commit_diff, message)
+    evaluation = get_openai_evaluation(commit.message, commit_diff, message)
+    display_evaluation(evaluation)
     save_evaluation(commit.hexsha, evaluation, target_dir)
 
 def evaluate_last_commit(repo, message, target_dir, branch, author):
-    # Get the last commit on the specified branch
     try:
         commit = next(repo.iter_commits(branch, max_count=1, author=author))
     except StopIteration:
         raise ValueError(f"No commits found in the branch {branch} by the specified author.")
     
-    commit_message = commit.message
+    display_commit_info(commit)
     commit_diff = get_commit_diff(commit)
 
-    evaluation = get_openai_evaluation(commit_message, commit_diff, message)
+    evaluation = get_openai_evaluation(commit.message, commit_diff, message)
+    display_evaluation(evaluation)
     save_evaluation(commit.hexsha, evaluation, target_dir)
 
 def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, author):
@@ -95,18 +115,20 @@ def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_c
         raise ValueError(f"An error occurred while retrieving the commit range {start_commit}..{end_commit}: {e}")
 
     for commit in commits:
-        commit_message = commit.message
+        display_commit_info(commit)
         commit_diff = get_commit_diff(commit)
 
-        evaluation = get_openai_evaluation(commit_message, commit_diff, message)
+        evaluation = get_openai_evaluation(commit.message, commit_diff, message)
+        display_evaluation(evaluation)
         save_evaluation(commit.hexsha, evaluation, target_dir)
 
 def evaluate_all_commits(repo, message, target_dir, branch, author):
     for commit in repo.iter_commits(branch, author=author):
-        commit_message = commit.message
+        display_commit_info(commit)
         commit_diff = get_commit_diff(commit)
 
-        evaluation = get_openai_evaluation(commit_message, commit_diff, message)
+        evaluation = get_openai_evaluation(commit.message, commit_diff, message)
+        display_evaluation(evaluation)
         save_evaluation(commit.hexsha, evaluation, target_dir)
 
 def get_openai_evaluation(commit_message, commit_diff, message):
@@ -118,7 +140,6 @@ def get_openai_evaluation(commit_message, commit_diff, message):
         ],
         max_tokens=500
     )
-    print(response.choices[0].message.content.strip())
     return response.choices[0].message.content.strip()
 
 if __name__ == '__main__':
