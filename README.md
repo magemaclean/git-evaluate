@@ -1,86 +1,104 @@
-# git-evaluate
 
-`git-evaluate` is a Python script to evaluate git commits using OpenAI's API.
+# Git Evaluate
 
-## Features
-
-- Evaluate all commits in a git repository.
-- Evaluate a specific commit by its hash.
-- Evaluate a range of commits by specifying start and end commit hashes.
-- Evaluate the last commit on a specified branch.
-- Generate a summary report of all evaluations.
-- Save evaluations in a `.git-evaluate` folder within the target directory.
+Git Evaluate is a Python application designed to evaluate git commits using the OpenAI API. It can evaluate specific commits, a range of commits, or all commits in a repository, and save the evaluations as JSON files. Additionally, it can generate a summary of all evaluations.
 
 ## Installation
 
-1. Clone the repository:
-    ```sh
-    git clone https://github.com/yourusername/git-evaluate.git
-    cd git-evaluate
-    ```
+1. **Clone the repository**
 
-2. Create a virtual environment and install dependencies:
+   ```bash
+   git clone <repository_url>
+   cd <repository_directory>
+   ```
 
-    On Unix or MacOS:
-    ```sh
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
+2. **Create a virtual environment**
 
-    On Windows:
-    ```sh
-    python -m venv venv
-    venv\Scripts\activate
-    ```
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
 
-3. Install required packages:
-    ```sh
-    pip install -r requirements.txt
-    ```
+   *** Note: For Windows, use `venv\Scripts\activate` instead of `source venv/bin/activate`. ***
 
-4. Set the `OPENAI_API_KEY` environment variable:
-    ```sh
-    export OPENAI_API_KEY='your-openai-api-key'  # Unix or MacOS
-    set OPENAI_API_KEY='your-openai-api-key'  # Windows
-    $env:OPENAI_API_KEY="your_api_key_here" # Windows PowerShell
-    ```
+
+3. **Install dependencies**
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set up OpenAI API Key**
+
+   Export your OpenAI API key as an environment variable:
+
+   ```bash
+   export OPENAI_API_KEY=your_openai_api_key
+   ```
+
+    *** Note: For Windows, use `set OPENAI_API_KEY=your_openai_api_key` instead of `export OPENAI_API_KEY=your_openai_api_key`. ***
 
 ## Usage
 
-Navigate to any project directory containing a git repository and run:
+Run the `main.py` script with the appropriate arguments:
 
-```sh
-python path/to/git-evaluate/main.py --evaluate <all|last|commit_id|start_commit:end_commit> --message "Analyze the following git diff and provide a summary of the changes, highlighting improvements, issues, and potential impacts on the codebase." --target-dir path/to/your/git/repository
+```bash
+python main.py --evaluate <evaluation_type> --message <prompt_message> --target-dir <target_directory> [--branch <branch_name>] [--author <author_email>] [--summary <summary_prompt>]
 ```
 
-- `<all|last|commit_id|start_commit:end_commit>`: Specify the commits to evaluate.
-- `--message`: Provide a prompt for the evaluation.
-- `--target-dir`: Specify the path to the git repository.
+### Arguments
 
-For example, to evaluate all commits in the current directory's git repository:
+- `--evaluate`: Specify the type of evaluation. Options are:
+  - `all`: Evaluate all commits in the repository.
+  - `last`: Evaluate the last commit.
+  - `last:n`: Evaluate the last `n` commits.
+  - `commit_hash`: Evaluate a specific commit by its hash.
+  - `start_commit:end_commit`: Evaluate a range of commits from `start_commit` to `end_commit`.
+- `--message`: The prompt message for the evaluation.
+- `--target-dir`: The target directory containing the git repository.
+- `--branch`: (Optional) The branch to evaluate commits from. Defaults to the current branch.
+- `--author`: (Optional) Filter commits by author email.
+- `--summary`: (Optional) Generate a summary of all evaluations with a prompt message.
 
-```sh
-python path/to/git-evaluate/main.py --evaluate all --message "Analyze the following git diff and provide a summary of the changes, highlighting improvements, issues, and potential impacts on the codebase." --target-dir .
-```
+### Examples
 
-To evaluate the last commit on the `main` branch in a specific directory:
+1. **Evaluate all commits**
 
-```sh
-python path/to/git-evaluate/main.py --evaluate last --message "Analyze the following git diff and provide a summary of the changes, highlighting improvements, issues, and potential impacts on the codebase." --target-dir path/to/your/git/repository
-```
+   ```bash
+   python main.py --evaluate all --message "Evaluate this commit" --target-dir /path/to/repo
+   ```
 
-To evaluate a specific commit by its hash:
+2. **Evaluate the last commit**
 
-```sh
-python path/to/git-evaluate/main.py --evaluate commit_id --message "Analyze the following git diff and provide a summary of the changes, highlighting improvements, issues, and potential impacts on the codebase." --target-dir path/to/your/git/repository
-```
+   ```bash
+   python main.py --evaluate last --message "Evaluate this commit" --target-dir /path/to/repo
+   ```
 
-To evaluate a range of commits by specifying start and end commit hashes:
+3. **Evaluate the last 5 commits**
 
-```sh
-python path/to/git-evaluate/main.py --evaluate start_commit:end_commit --message "Analyze the following git diff and provide a summary of the changes, highlighting improvements, issues, and potential impacts on the codebase." --target-dir path/to/your/git/repository
-```
+   ```bash
+   python main.py --evaluate last:5 --message "Evaluate these commits" --target-dir /path/to/repo
+   ```
+
+4. **Evaluate a specific commit**
+
+   ```bash
+   python main.py --evaluate abc1234 --message "Evaluate this specific commit" --target-dir /path/to/repo
+   ```
+
+5. **Evaluate a range of commits**
+
+   ```bash
+   python main.py --evaluate abc1234:def5678 --message "Evaluate these commits" --target-dir /path/to/repo
+   ```
+
+6. **Generate a summary**
+
+   ```bash
+   python main.py --evaluate all --message "Evaluate this commit" --target-dir /path/to/repo --summary "Summarize the evaluations"
+   ```
 
 ## Output
 
-The script will generate a summary report of the evaluations and save them in a `.git-evaluate` folder within the target directory.
+The evaluations are saved in the `.git-evaluate` directory within the target directory as JSON files. The summary, if generated, is also saved in this directory.
+

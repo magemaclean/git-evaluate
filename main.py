@@ -175,8 +175,6 @@ def generate_summary(target_dir, summary_prompt, branch, evaluate):
 
     console.print(f"\n[bold green]Summary saved to:[/bold green] {summary_file}")
 
-    return summary_file_name
-
 def get_openai_summary(evaluations, summary_prompt):
     evaluations_text = "\n\n".join([f"Commit {eval.get('hash')}:\n{eval.get('evaluation', 'No evaluation found')}" for eval in evaluations])
     response = client.chat.completions.create(
@@ -251,8 +249,7 @@ def main():
 
     if args.summary:
         try:
-            summary_file_name = generate_summary(args.target_dir, args.summary, branch, args.evaluate)
-            console.print(f"[bold green]Summary saved to:[/bold green] {summary_file_name}")
+            generate_summary(args.target_dir, args.summary, branch, args.evaluate)
         except Exception as e:
             console.print(Panel(f"[bold red]Error generating summary:[/bold red] {e}", title="Error"))
 
