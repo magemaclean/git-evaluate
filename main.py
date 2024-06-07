@@ -12,6 +12,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 console = Console()
 
 def display_commit_info(commit):
+    console.print("\n")  # Add spacing
     table = Table(title="Commit Information")
     table.add_column("Field", style="bold")
     table.add_column("Value")
@@ -25,10 +26,12 @@ def display_commit_info(commit):
     console.print(table)
 
 def display_evaluation(evaluation):
+    console.print("\n")  # Add spacing
     console.print("[bold green]Evaluation Result:[/bold green]")
     console.print(evaluation)
 
 def display_summary(summary):
+    console.print("\n")  # Add spacing
     console.print("[bold green]Summary Result:[/bold green]")
     console.print(summary)
 
@@ -49,7 +52,7 @@ def save_json_evaluation(commit, evaluation, target_dir):
     with open(eval_file, 'w') as f:
         json.dump(eval_data, f, indent=4)
     
-    console.print(f"[bold green]Evaluation saved to:[/bold green] {eval_file}")
+    console.print(f"\n[bold green]Evaluation saved to:[/bold green] {eval_file}")
 
 def get_commit_diff(commit):
     parent = commit.parents[0] if commit.parents else None
@@ -170,6 +173,8 @@ def generate_summary(target_dir, summary_prompt, branch, evaluate):
     with open(summary_file, 'w') as f:
         json.dump(summary_data, f, indent=4)
 
+    console.print(f"\n[bold green]Summary saved to:[/bold green] {summary_file}")
+
     return summary_file_name
 
 def get_openai_summary(evaluations, summary_prompt):
@@ -250,8 +255,6 @@ def main():
             console.print(f"[bold green]Summary saved to:[/bold green] {summary_file_name}")
         except Exception as e:
             console.print(Panel(f"[bold red]Error generating summary:[/bold red] {e}", title="Error"))
-
-
 
 if __name__ == '__main__':
     main()
