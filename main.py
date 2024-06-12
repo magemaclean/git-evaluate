@@ -47,6 +47,22 @@ def display_summary(summary):
     console.print("[bold green]Summary Result:[/bold green]")
     console.print(summary)
 
+def display_response_info(system_text, user_prompt, response, total_tokens, model):
+    console.print("\n")  # Add spacing
+
+    table = Table(title="Response Information")
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+
+    table.add_row("Model", MODELS[model]["name"])
+    table.add_row("System Text", system_text)
+    table.add_row("User Prompt", user_prompt)
+    table.add_row("Total Tokens", f"{total_tokens}")
+    table.add_row("Response Length", f"{len(response)}")
+
+    console.print(table)
+
+
 def save_json_evaluation(commit, evaluation, target_dir):
     eval_data = {
         "hash": commit.hexsha,
@@ -155,15 +171,12 @@ def count_tokens(text, model=DEFAULT_MODEL):
     tokens = encoding.encode(text)
     return len(tokens)
 
-def get_openai_evaluation(commit_message, commit_diff, message, model=DEFAULT_MODEL):
+def get_openai_evaluation(commit_message, commit_diff, evaluation_prompt, model=DEFAULT_MODEL):
     evaluation_system_text = "Evaluating the commit message and diff to provide a summary."
-    evaluation_text = f"{message}\n\nCommit message: {commit_message}\n\nCommit diff:\n{commit_diff}"
+    evaluation_text = f"{evaluation_prompt}\n\nCommit message: {commit_message}\n\nCommit diff:\n{commit_diff}"
     full_response = ""
     continuation_prompt = "CONTINUE"
     total_usage = 0
-
-    # Print the summary text length
-    console.print(f"[bold blue]Evaluation Text Length:[/bold blue] {len(evaluation_text)}")
 
     # Count tokens
     total_tokens = count_tokens(evaluation_text, model)
@@ -202,7 +215,10 @@ def get_openai_evaluation(commit_message, commit_diff, message, model=DEFAULT_MO
             # Continue the prompt responses
             message_list.append({"role": "user", "content": continuation_prompt})
 
-    console.print(f"\n[bold blue]Total Tokens Used:[/bold blue] {total_usage}")
+    # Display the response information
+    display_response_info(evaluation_system_text, evaluation_prompt, full_response, total_tokens, model)
+
+    # Return the full response
     return full_response.strip()
 
 def generate_summary(target_dir, summary_prompt, branch, evaluate):
@@ -234,16 +250,13 @@ def generate_summary(target_dir, summary_prompt, branch, evaluate):
 
 
 def get_openai_summary(evaluations, summary_prompt, model=DEFAULT_MODEL):
-    evaluations_system_text = "Generating a summary of all evaluations with a prompt message."
-    evaluations_text = "\n\n".join([f"Commit {eval.get('hash')}:\n{eval.get('evaluation', 'No evaluation found')}" for eval in evaluations])
+    summary_system_text = "Generating a summary of all evaluations with a prompt message."
+    summary_text = "\n\n".join([f"Commit {eval.get('hash')}:\n{eval.get('evaluation', 'No evaluation found')}" for eval in evaluations])
     full_response = ""
     continuation_prompt = "CONTINUE"
 
-    # Print the summary text length
-    # console.print(f"[bold blue]Summary Text Length:[/bold blue] {len(evaluations_text)}")
-
     # Count tokens
-    total_tokens = count_tokens(evaluations_text, model)
+    total_tokens = count_tokens(summary_text, model)
 
     # Check if the summary text length exceeds the model's max tokens
     if total_tokens > MODELS[model]["max_tokens"]:
@@ -251,8 +264,8 @@ def get_openai_summary(evaluations, summary_prompt, model=DEFAULT_MODEL):
         return
 
     messageList = [
-        {"role": "system", "content": f"{evaluations_system_text}"},
-        {"role": "user", "content": f"{summary_prompt}\n\n{evaluations_text}"}
+        {"role": "system", "content": f"{summary_system_text}"},
+        {"role": "user", "content": f"{summary_prompt}\n\n{summary_text}"}
     ]
 
     # Loop to get the response in parts
@@ -275,12 +288,11 @@ def get_openai_summary(evaluations, summary_prompt, model=DEFAULT_MODEL):
         else:
             # Continue the prompt responses
             messageList.append({"role": "user", "content": continuation_prompt})
+    
+    # Display the response information
+    display_response_info(summary_system_text, summary_prompt, full_response, total_tokens, model)
 
-        # Print the response
-        console.print("\n")
-        console.print(part_response)
-        console.print("---------\n\n")
-            
+    # Return the full response
     return full_response.strip()
 
 def main():
