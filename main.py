@@ -16,13 +16,12 @@ console = Console()
 DEFAULT_MODEL = "gpt-4o-2024-05-13"
 MODELS = {
     "gpt-3.5": { "name": "GPT-3.5", "max_tokens": 500 },
-    "gpt-3.5-turbo": { "name": "GPT-3.5 Turbo", "max_tokens": 1000 },
+    "gpt-3.5-turbo": { "name": "GPT-3.5 Turbo", "max_tokens": 8192 },
     "gpt-4": { "name": "GPT-4", "max_tokens": 4096 },
     "gpt-4o": { "name": "GPT-4o", "max_tokens": 4096 },
     "gpt-4o-2024-05-13": { "name": "GPT-4o (2024-05-13)", "max_tokens": 4096 }
 }
   
-
 def display_commit_info(commit):
     console.print("\n")  # Add spacing
     table = Table(title="Commit Information")
@@ -37,16 +36,6 @@ def display_commit_info(commit):
 
     console.print(table)
 
-def display_evaluation(evaluation):
-    console.print("\n")  # Add spacing
-    console.print("[bold green]Evaluation Result:[/bold green]")
-    console.print(evaluation)
-
-def display_summary(summary):
-    console.print("\n")  # Add spacing
-    console.print("[bold green]Summary Result:[/bold green]")
-    console.print(summary)
-
 def display_response_info(system_text, user_prompt, response, total_tokens, model):
     console.print("\n")  # Add spacing
 
@@ -59,6 +48,8 @@ def display_response_info(system_text, user_prompt, response, total_tokens, mode
     table.add_row("User Prompt", user_prompt)
     table.add_row("Total Tokens", f"{total_tokens}")
     table.add_row("Response Length", f"{len(response)}")
+    table.add_row("", "")
+    table.add_row("Response", response, style="green")
 
     console.print(table)
 
@@ -93,7 +84,7 @@ def get_commit_diff(commit):
             diffs.append(d.diff.decode('latin-1'))
     return '\n'.join(diffs)
 
-def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, author):
+def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, author, model):
     available_commits = [commit.hexsha for commit in repo.iter_commits(branch, author=author)]
 
     if commit_id not in available_commits:
@@ -109,11 +100,10 @@ def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, autho
     display_commit_info(commit)
     commit_diff = get_commit_diff(commit)
 
-    evaluation = get_openai_evaluation(commit.message, commit_diff, message)
-    display_evaluation(evaluation)
+    evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
     save_json_evaluation(commit, evaluation, target_dir)
 
-def evaluate_last_commit(repo, message, target_dir, branch, author):
+def evaluate_last_commit(repo, message, target_dir, branch, author, model):
     try:
         commit = next(repo.iter_commits(branch, max_count=1, author=author))
     except StopIteration:
@@ -122,11 +112,10 @@ def evaluate_last_commit(repo, message, target_dir, branch, author):
     display_commit_info(commit)
     commit_diff = get_commit_diff(commit)
 
-    evaluation = get_openai_evaluation(commit.message, commit_diff, message)
-    display_evaluation(evaluation)
+    evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
     save_json_evaluation(commit, evaluation, target_dir)
 
-def evaluate_last_n_commits(repo, message, target_dir, branch, author, n):
+def evaluate_last_n_commits(repo, message, target_dir, branch, author, n, model):
     try:
         commits = list(repo.iter_commits(branch, max_count=n, author=author))
         if not commits:
@@ -138,11 +127,10 @@ def evaluate_last_n_commits(repo, message, target_dir, branch, author, n):
         display_commit_info(commit)
         commit_diff = get_commit_diff(commit)
 
-        evaluation = get_openai_evaluation(commit.message, commit_diff, message)
-        display_evaluation(evaluation)
+        evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
         save_json_evaluation(commit, evaluation, target_dir)
 
-def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, author):
+def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, author, model):
     try:
         commits = list(repo.iter_commits(f'{start_commit}..{end_commit}', author=author))
     except git.exc.GitCommandError as e:
@@ -152,19 +140,16 @@ def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_c
         display_commit_info(commit)
         commit_diff = get_commit_diff(commit)
 
-        evaluation = get_openai_evaluation(commit.message, commit_diff, message)
-        display_evaluation(evaluation)
+        evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
         save_json_evaluation(commit, evaluation, target_dir)
 
-def evaluate_all_commits(repo, message, target_dir, branch, author):
+def evaluate_all_commits(repo, message, target_dir, branch, author, model):
     for commit in repo.iter_commits(branch, author=author):
         display_commit_info(commit)
         commit_diff = get_commit_diff(commit)
 
-        evaluation = get_openai_evaluation(commit.message, commit_diff, message)
-        display_evaluation(evaluation)
+        evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
         save_json_evaluation(commit, evaluation, target_dir)
-
 
 def count_tokens(text, model=DEFAULT_MODEL):
     encoding = tiktoken.encoding_for_model(model)
@@ -221,7 +206,7 @@ def get_openai_evaluation(commit_message, commit_diff, evaluation_prompt, model=
     # Return the full response
     return full_response.strip()
 
-def generate_summary(target_dir, summary_prompt, branch, evaluate):
+def generate_summary(target_dir, summary_prompt, branch, evaluate, model):
     eval_dir = os.path.join(target_dir, '.git-evaluate')
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     summary_file_name = f"summary_{branch}_{evaluate}_{timestamp}.json"
@@ -234,9 +219,7 @@ def generate_summary(target_dir, summary_prompt, branch, evaluate):
                 evaluation = json.load(f)
             evaluations.append(evaluation)
 
-    summary = get_openai_summary(evaluations, summary_prompt)
-
-    display_summary(summary)
+    summary = get_openai_summary(evaluations, summary_prompt, model)
 
     summary_data = {
         "evaluations": evaluations,
@@ -247,7 +230,6 @@ def generate_summary(target_dir, summary_prompt, branch, evaluate):
         json.dump(summary_data, f, indent=4)
 
     console.print(f"\n[bold green]Summary saved to:[/bold green] {summary_file}")
-
 
 def get_openai_summary(evaluations, summary_prompt, model=DEFAULT_MODEL):
     summary_system_text = "Generating a summary of all evaluations with a prompt message."
@@ -303,6 +285,7 @@ def main():
     parser.add_argument('--branch', required=False, help='Branch to evaluate commits from.')
     parser.add_argument('--author', required=False, help='Filter commits by author.')
     parser.add_argument('--summary', help='Generate a summary of all evaluations with a prompt message.')
+    parser.add_argument('--model', default=DEFAULT_MODEL, help='Specify the model to use for evaluation (default: gpt-4o-2024-05-13)')
 
     args = parser.parse_args()
 
@@ -338,21 +321,21 @@ def main():
     try:
         # Evaluate commits based on the provided arguments
         if args.evaluate == 'all':
-            evaluate_all_commits(repo, args.message, args.target_dir, branch, args.author)
+            evaluate_all_commits(repo, args.message, args.target_dir, branch, args.author, args.model)
         elif args.evaluate.startswith('last:'):
             n = int(args.evaluate.split(':')[1])
-            evaluate_last_n_commits(repo, args.message, args.target_dir, branch, args.author, n)
+            evaluate_last_n_commits(repo, args.message, args.target_dir, branch, args.author, n, args.model)
         elif args.evaluate == 'last':
-            evaluate_last_commit(repo, args.message, args.target_dir, branch, args.author)
+            evaluate_last_commit(repo, args.message, args.target_dir, branch, args.author, args.model)
         elif ':' in args.evaluate:
             start_commit, end_commit = args.evaluate.split(':')
-            evaluate_commit_range(repo, args.message, args.target_dir, branch, start_commit, end_commit, args.author)
+            evaluate_commit_range(repo, args.message, args.target_dir, branch, start_commit, end_commit, args.author, args.model)
         else:
-            evaluate_specific_commit(repo, args.message, args.target_dir, branch, args.evaluate, args.author)
+            evaluate_specific_commit(repo, args.message, args.target_dir, branch, args.evaluate, args.author, args.model)
         
         # Generate a summary if the option is provided
         if args.summary:
-            generate_summary(args.target_dir, args.summary, branch, args.evaluate)
+            generate_summary(args.target_dir, args.summary, branch, args.evaluate, args.model)
         
     except ValueError as ve:
         console.print(Panel(f"[bold red]ValueError:[/bold red] {ve}", title="Error", subtitle="Please check your input"))
