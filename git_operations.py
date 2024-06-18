@@ -2,6 +2,7 @@ import os
 import json
 import git
 from rich.console import Console
+from rich.table import Table
 from datetime import datetime
 from utils import display_commit_info, display_response_info
 from evaluation import get_openai_evaluation, get_openai_summary
@@ -152,3 +153,56 @@ def generate_summary(target_dir, summary_prompt, branch, evaluated_commits, mode
         json.dump(summary_data, f, indent=4)
 
     console.print(f"\n[bold green]Summary saved to:[/bold green] {summary_file}")
+
+def list_branches(repo):
+    branches = [head.name for head in repo.heads]
+    console.print(f"\n[bold blue]Branches:[/bold blue] {', '.join(branches)}")
+
+def list_authors(repo):
+    authors = {}
+    for commit in repo.iter_commits():
+        author = commit.author
+        if author.email not in authors:
+            authors[author.email] = {
+                "name": author.name,
+                "email": author.email,
+                "username": author.name  # Assuming username is the same as name; change as needed
+            }
+    table = Table(title="Authors")
+    table.add_column("Name", style="bold")
+    table.add_column("Email")
+    table.add_column("Username")
+
+    for author in authors.values():
+        table.add_row(author["name"], author["email"], author["username"])
+
+    console.print(table)
+
+def list_commits(repo, num_commits):
+    commits = list(repo.iter_commits(max_count=num_commits))
+    table = Table(title="Recent Commits")
+    table.add_column("Hash", style="bold")
+    table.add_column("Author")
+    table.add_column("Date")
+    table.add_column("Message")
+
+    for commit in commits:
+        table.add_row(commit.hexsha, commit.author.name, str(commit.committed_datetime), commit.message.strip())
+    
+    console.print(table)
+
+def show_commit(repo, commit_hash):
+    try:
+        commit = repo.commit(commit_hash)
+    except git.exc.BadName:
+        console.print(f"[bold red]Error:[/bold red] The commit hash {commit_hash} could not be found in the repository.")
+        return
+    except Exception as e:
+        console.print(f"[bold red]Error:[/bold red] An error occurred while retrieving the commit {commit_hash}: {e}")
+        return
+    
+    display_commit_info(commit)
+    commit_diff = get_commit_diff(commit)
+    
+    console.print("\n[bold blue]Commit Diff:[/bold blue]")
+    console.print(commit_diff)

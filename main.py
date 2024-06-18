@@ -5,7 +5,8 @@ from rich.console import Console
 from rich.panel import Panel
 from git_operations import (
     evaluate_all_commits, evaluate_last_commit, evaluate_last_n_commits,
-    evaluate_commit_range, evaluate_specific_commit, generate_summary
+    evaluate_commit_range, evaluate_specific_commit, generate_summary,
+    list_branches, list_authors, list_commits, show_commit
 )
 from models import DEFAULT_MODEL, MODELS
 
@@ -31,6 +32,12 @@ def main():
     parser.add_argument('--include-diff', action='store_true', help='Include commit diff in the evaluation.')
     parser.add_argument('--output-format', choices=['json', 'text'], help='Format of the output evaluation file.')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging.')
+    
+    # New query arguments
+    parser.add_argument('--list-branches', action='store_true', help='List all branches in the repository.')
+    parser.add_argument('--list-authors', action='store_true', help='List all authors who have contributed to the repository.')
+    parser.add_argument('--list-commits', type=int, nargs='?', const=10, help='List the most recent commits in the repository (default: 10).')
+    parser.add_argument('--show-commit', help='Show details of a specific commit.')
 
     args = parser.parse_args()
 
@@ -49,10 +56,6 @@ def main():
         evaluate = config.get('evaluate', None)
     else:
         default_model = DEFAULT_MODEL
-        max_tokens = None
-        include_diff = False
-        output_format = 'json'
-        verbose = False
         target_dir = None
         message = None
         summary = None
@@ -61,14 +64,6 @@ def main():
     # Override config settings with command-line arguments if provided
     if args.model:
         default_model = args.model
-    if args.max_tokens:
-        max_tokens = args.max_tokens
-    if args.include_diff:
-        include_diff = True
-    if args.output_format:
-        output_format = args.output_format
-    if args.verbose:
-        verbose = True
     if args.target_dir:
         target_dir = args.target_dir
     if args.message:
@@ -78,9 +73,9 @@ def main():
     if args.evaluate:
         evaluate = args.evaluate
 
-    # Validate required arguments
-    if not target_dir or not message or not evaluate:
-        console.print(f"[bold red]Error:[/bold red] 'target-dir', 'message', and 'evaluate' arguments are required.")
+    # Validate required arguments for evaluation
+    if not target_dir:
+        console.print(f"[bold red]Error:[/bold red] 'target-dir' argument is required.")
         return
 
     # Check if OpenAI API key is set
@@ -96,6 +91,28 @@ def main():
         return
     except Exception as e:
         console.print(f"[bold red]Error:[/bold red] An error occurred while accessing the repository: {e}")
+        return
+
+    # Handle repository queries
+    if args.list_branches:
+        list_branches(repo)
+        return
+
+    if args.list_authors:
+        list_authors(repo)
+        return
+
+    if args.list_commits:
+        list_commits(repo, args.list_commits)
+        return
+
+    if args.show_commit:
+        show_commit(repo, args.show_commit)
+        return
+
+    # If evaluating, ensure message and evaluate are provided
+    if not message or not evaluate:
+        console.print(f"[bold red]Error:[/bold red] 'message' and 'evaluate' arguments are required for evaluation.")
         return
 
     console.print(f"[bold blue]Using repository:[/bold blue] {repo.working_dir}")

@@ -19,8 +19,7 @@ Git Evaluate is a Python application designed to evaluate git commits using the 
    source venv/bin/activate
    ```
 
-   *** Note: For Windows, use `venv\Scripts\activate` instead of `source venv/bin/activate`. ***
-
+   ***Note: For Windows, use `venv\Scripts\activate` instead of `source venv/bin/activate`.***
 
 3. **Install dependencies**
 
@@ -36,7 +35,7 @@ Git Evaluate is a Python application designed to evaluate git commits using the 
    export OPENAI_API_KEY=your_openai_api_key
    ```
 
-    *** Note: For Windows, use `set OPENAI_API_KEY=your_openai_api_key` instead of `export OPENAI_API_KEY=your_openai_api_key`. ***
+   ***Note: For Windows, use `set OPENAI_API_KEY=your_openai_api_key` instead of `export OPENAI_API_KEY=your_openai_api_key`.***
 
 ## Usage
 
@@ -59,6 +58,12 @@ python main.py --evaluate <evaluation_type> --message <prompt_message> --target-
 - `--branch`: (Optional) The branch to evaluate commits from. Defaults to the current branch.
 - `--author`: (Optional) Filter commits by author email.
 - `--summary`: (Optional) Generate a summary of all evaluations with a prompt message.
+- `--model`: (Optional) Specify the model to use for evaluation (default: gpt-4o-2024-05-13).
+- `--config-file`: (Optional) Path to a configuration file with OpenAI API key and other settings.
+- `--list-branches`: (Optional) List all branches in the repository.
+- `--list-authors`: (Optional) List all authors who have contributed to the repository.
+- `--list-commits`: (Optional) List the most recent commits in the repository (default: 10).
+- `--show-commit`: (Optional) Show details of a specific commit.
 
 ### Examples
 
@@ -98,7 +103,30 @@ python main.py --evaluate <evaluation_type> --message <prompt_message> --target-
    python main.py --evaluate all --message "Evaluate this commit" --target-dir /path/to/repo --summary "Summarize the evaluations"
    ```
 
+7. **Using configuration file**
+
+   ```bash
+   python main.py --evaluate all --config-file /path/to/config.json
+   ```
+
+8. **List all branches**
+
+   ```bash
+   python main.py --list-branches --target-dir /path/to/repo
+   ```
+
+9. **List all authors**
+
+   ```bash
+   python main.py --list-authors --target-dir /path/to/repo
+   ```
+
+10. **Show details of a specific commit**
+
+    ```bash
+    python main.py --show-commit abc1234 --target-dir /path/to/repo
+    ```
+
 ## Output
 
 The evaluations are saved in the `.git-evaluate` directory within the target directory as JSON files. The summary, if generated, is also saved in this directory.
-

@@ -1,6 +1,6 @@
 from rich.console import Console
 from rich.table import Table
-from models import DEFAULT_MODEL, MODELS
+from models import MODELS, DEFAULT_MODEL
 import tiktoken
 
 console = Console()
