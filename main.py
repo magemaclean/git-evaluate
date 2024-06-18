@@ -156,6 +156,66 @@ def count_tokens(text, model=DEFAULT_MODEL):
     tokens = encoding.encode(text)
     return len(tokens)
 
+from typing import List, Optional, Tuple
+
+def tokenize(text: str, model: str = DEFAULT_MODEL) -> List[int]:
+    encoding = tiktoken.encoding_for_model(model)
+    tokens = encoding.encode(text)
+    return tokens
+
+def chunk_on_delimiter(input_string: str, max_tokens: int, delimiter: str) -> List[str]:
+    chunks = input_string.split(delimiter)
+    combined_chunks, _, dropped_chunk_count = combine_chunks_with_no_minimum(
+        chunks, max_tokens, chunk_delimiter=delimiter, add_ellipsis_for_overflow=True
+    )
+    if dropped_chunk_count > 0:
+        print(f"warning: {dropped_chunk_count} chunks were dropped due to overflow")
+    combined_chunks = [f"{chunk}{delimiter}" for chunk in combined_chunks]
+    return combined_chunks
+
+def combine_chunks_with_no_minimum(
+        chunks: List[str],
+        max_tokens: int,
+        chunk_delimiter="\n\n",
+        header: Optional[str] = None,
+        add_ellipsis_for_overflow=False,
+) -> Tuple[List[str], List[int], int]:
+    dropped_chunk_count = 0
+    output = []  # list to hold the final combined chunks
+    output_indices = []  # list to hold the indices of the final combined chunks
+    candidate = (
+        [] if header is None else [header]
+    )  # list to hold the current combined chunk candidate
+    candidate_indices = []
+    for chunk_i, chunk in enumerate(chunks):
+        chunk_with_header = [chunk] if header is None else [header, chunk]
+        if len(tokenize(chunk_delimiter.join(chunk_with_header))) > max_tokens:
+            print(f"warning: chunk overflow")
+            if (
+                    add_ellipsis_for_overflow
+                    and len(tokenize(chunk_delimiter.join(candidate + ["..."]))) <= max_tokens
+            ):
+                candidate.append("...")
+                dropped_chunk_count += 1
+            continue  # this case would break downstream assumptions
+        # estimate token count with the current chunk added
+        extended_candidate_token_count = len(tokenize(chunk_delimiter.join(candidate + [chunk])))
+        # If the token count exceeds max_tokens, add the current candidate to output and start a new candidate
+        if extended_candidate_token_count > max_tokens:
+            output.append(chunk_delimiter.join(candidate))
+            output_indices.append(candidate_indices)
+            candidate = chunk_with_header  # re-initialize candidate
+            candidate_indices = [chunk_i]
+        # otherwise keep extending the candidate
+        else:
+            candidate.append(chunk)
+            candidate_indices.append(chunk_i)
+    # add the remaining candidate to output if it's not empty
+    if (header is not None and len(candidate) > 1) or (header is None and len(candidate) > 0):
+        output.append(chunk_delimiter.join(candidate))
+        output_indices.append(candidate_indices)
+    return output, output_indices, dropped_chunk_count
+
 def get_openai_evaluation(commit_message, commit_diff, evaluation_prompt, model=DEFAULT_MODEL):
     evaluation_system_text = "Evaluating the commit message and diff to provide a summary."
     evaluation_text = f"{evaluation_prompt}\n\nCommit message: {commit_message}\n\nCommit diff:\n{commit_diff}"
@@ -163,30 +223,23 @@ def get_openai_evaluation(commit_message, commit_diff, evaluation_prompt, model=
     continuation_prompt = "CONTINUE"
     total_usage = 0
 
-    # Count tokens
-    total_tokens = count_tokens(evaluation_text, model)
+    # Chunk the evaluation text if it exceeds the model's max tokens
+    max_tokens = MODELS[model]["max_tokens"]
+    evaluation_chunks = chunk_on_delimiter(evaluation_text, max_tokens, "\n\n")
 
-    # Check if the evaluation text length exceeds the model's max tokens
-    if total_tokens > MODELS[model]["max_tokens"]:
-        console.print(f"[bold red]Error:[/bold red] The evaluation text length exceeds the model's max tokens ({MODELS[model]['max_tokens']}).")
-        return
-    
     # Define the message list with the initial system message
     message_list = [
         {"role": "system", "content": f"{evaluation_system_text}"},
-        {"role": "user", "content": f"{evaluation_text}"}
     ]
 
-
-    # Loop to get the response in parts
-    while True:
+    for chunk in evaluation_chunks:
+        message_list.append({"role": "user", "content": f"{chunk}"})
         response = client.chat.completions.create(
             model=model,
             messages=message_list,
-            max_tokens=MODELS[model]["max_tokens"]
+            max_tokens=max_tokens
         )
         part_response = response.choices[0].message.content.strip()
-        # total_usage += response.usage['total_tokens']
         
         # Append the new part of the response, making sure we don't duplicate content
         if part_response not in full_response:
@@ -201,10 +254,11 @@ def get_openai_evaluation(commit_message, commit_diff, evaluation_prompt, model=
             message_list.append({"role": "user", "content": continuation_prompt})
 
     # Display the response information
-    display_response_info(evaluation_system_text, evaluation_prompt, full_response, total_tokens, model)
+    display_response_info(evaluation_system_text, evaluation_prompt, full_response, count_tokens(evaluation_text, model), model)
 
     # Return the full response
     return full_response.strip()
+
 
 def generate_summary(target_dir, summary_prompt, branch, evaluate, model):
     eval_dir = os.path.join(target_dir, '.git-evaluate')
@@ -232,47 +286,46 @@ def generate_summary(target_dir, summary_prompt, branch, evaluate, model):
     console.print(f"\n[bold green]Summary saved to:[/bold green] {summary_file}")
 
 def get_openai_summary(evaluations, summary_prompt, model=DEFAULT_MODEL):
-    summary_system_text = "Generating a summary of all evaluations with a prompt message."
-    summary_text = "\n\n".join([f"Commit {eval.get('hash')}:\n{eval.get('evaluation', 'No evaluation found')}" for eval in evaluations])
+    summary_system_text = "Generating a summary of the evaluations."
+    evaluation_text = f"{summary_prompt}\n\n"
+    for evaluation in evaluations:
+        evaluation_text += f"Commit message: {evaluation['message']}\nEvaluation: {evaluation['evaluation']}\n\n"
     full_response = ""
     continuation_prompt = "CONTINUE"
+    total_usage = 0
 
-    # Count tokens
-    total_tokens = count_tokens(summary_text, model)
+    # Chunk the evaluation text if it exceeds the model's max tokens
+    max_tokens = MODELS[model]["max_tokens"]
+    evaluation_chunks = chunk_on_delimiter(evaluation_text, max_tokens, "\n\n")
 
-    # Check if the summary text length exceeds the model's max tokens
-    if total_tokens > MODELS[model]["max_tokens"]:
-        console.print(f"[bold red]Error:[/bold red] The summary text length exceeds the model's max tokens ({MODELS[model]['max_tokens']}).")
-        return
-
-    messageList = [
+    # Define the message list with the initial system message
+    message_list = [
         {"role": "system", "content": f"{summary_system_text}"},
-        {"role": "user", "content": f"{summary_prompt}\n\n{summary_text}"}
     ]
 
-    # Loop to get the response in parts
-    while True:
+    for chunk in evaluation_chunks:
+        message_list.append({"role": "user", "content": f"{chunk}"})
         response = client.chat.completions.create(
             model=model,
-            messages=messageList,
-            max_tokens=MODELS[model]["max_tokens"]
+            messages=message_list,
+            max_tokens=max_tokens
         )
         part_response = response.choices[0].message.content.strip()
         
         # Append the new part of the response, making sure we don't duplicate content
         if part_response not in full_response:
             full_response += part_response
-            messageList.append({"role": "assistant", "content": part_response})
+            message_list.append({"role": "assistant", "content": part_response})
         
         # Check if response is complete or needs continuation
         if response.choices[0].finish_reason == "stop":
             break
         else:
             # Continue the prompt responses
-            messageList.append({"role": "user", "content": continuation_prompt})
-    
+            message_list.append({"role": "user", "content": continuation_prompt})
+
     # Display the response information
-    display_response_info(summary_system_text, summary_prompt, full_response, total_tokens, model)
+    display_response_info(summary_system_text, summary_prompt, full_response, count_tokens(evaluation_text, model), model)
 
     # Return the full response
     return full_response.strip()
