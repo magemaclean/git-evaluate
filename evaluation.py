@@ -5,10 +5,10 @@ from chunking import chunk_on_delimiter, tokenize
 from utils import display_response_info, count_tokens
 from models import MODELS, DEFAULT_MODEL
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 console = Console()
 
 def get_openai_evaluation(commit_message, commit_diff, evaluation_prompt, model=DEFAULT_MODEL):
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     evaluation_system_text = "Evaluating the commit message and diff to provide a summary."
     evaluation_text = f"{evaluation_prompt}\n\nCommit message: {commit_message}\n\nCommit diff:\n{commit_diff}"
     full_response = ""
@@ -52,6 +52,7 @@ def get_openai_evaluation(commit_message, commit_diff, evaluation_prompt, model=
     return full_response.strip()
 
 def get_openai_summary(evaluations, summary_prompt, model=DEFAULT_MODEL):
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     summary_system_text = "Generating a summary of all evaluations with a prompt message."
     summary_text = "\n\n".join([f"Commit {eval.get('hash')}:\n{eval.get('evaluation', 'No evaluation found')}" for eval in evaluations])
     full_response = ""

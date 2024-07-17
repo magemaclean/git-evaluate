@@ -1,11 +1,14 @@
+# git_operations.py
+
 import os
 import json
 import git
+from datetime import datetime
 from rich.console import Console
 from rich.table import Table
-from datetime import datetime
-from utils import display_commit_info, display_response_info
+from utils import display_commit_info
 from evaluation import get_openai_evaluation, get_openai_summary
+from output import save_evaluation, save_summary
 
 console = Console()
 
@@ -20,26 +23,7 @@ def get_commit_diff(commit):
             diffs.append(d.diff.decode('latin-1'))
     return '\n'.join(diffs)
 
-def save_json_evaluation(commit, evaluation, target_dir):
-    eval_data = {
-        "hash": commit.hexsha,
-        "author": commit.author.name,
-        "email": commit.author.email,
-        "date": str(commit.committed_datetime),
-        "message": commit.message.strip(),
-        "diff": get_commit_diff(commit),
-        "evaluation": evaluation
-    }
-    eval_dir = os.path.join(target_dir, '.git-evaluate')
-    if not os.path.exists(eval_dir):
-        os.makedirs(eval_dir)
-    eval_file = os.path.join(eval_dir, f"{commit.hexsha}.json")
-    with open(eval_file, 'w') as f:
-        json.dump(eval_data, f, indent=4)
-    
-    console.print(f"\n[bold green]Evaluation saved to:[/bold green] {eval_file}")
-
-def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, author, model):
+def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, author, model, output_format, output_dir, output_include_diff):
     available_commits = [commit.hexsha for commit in repo.iter_commits(branch, author=author)]
 
     if commit_id not in available_commits:
@@ -53,28 +37,46 @@ def evaluate_specific_commit(repo, message, target_dir, branch, commit_id, autho
         raise ValueError(f"An error occurred while retrieving the commit {commit_id}: {e}")
     
     display_commit_info(commit)
-    commit_diff = get_commit_diff(commit)
+    commit_diff = get_commit_diff(commit) if output_include_diff else ""
 
     evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
-    save_json_evaluation(commit, evaluation, target_dir)
+    eval_data = {
+        "hash": commit.hexsha,
+        "author": commit.author.name,
+        "email": commit.author.email,
+        "date": str(commit.committed_datetime),
+        "message": commit.message.strip(),
+        "diff": commit_diff,
+        "evaluation": evaluation
+    }
+    save_evaluation(eval_data, output_dir or target_dir, output_format)
 
     return [commit.hexsha]
 
-def evaluate_last_commit(repo, message, target_dir, branch, author, model):
+def evaluate_last_commit(repo, message, target_dir, branch, author, model, output_format, output_dir, output_include_diff):
     try:
         commit = next(repo.iter_commits(branch, max_count=1, author=author))
     except StopIteration:
         raise ValueError(f"No commits found in the branch {branch} by the specified author.")
     
     display_commit_info(commit)
-    commit_diff = get_commit_diff(commit)
+    commit_diff = get_commit_diff(commit) if output_include_diff else ""
 
     evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
-    save_json_evaluation(commit, evaluation, target_dir)
+    eval_data = {
+        "hash": commit.hexsha,
+        "author": commit.author.name,
+        "email": commit.author.email,
+        "date": str(commit.committed_datetime),
+        "message": commit.message.strip(),
+        "diff": commit_diff,
+        "evaluation": evaluation
+    }
+    save_evaluation(eval_data, output_dir or target_dir, output_format)
 
     return [commit.hexsha]
 
-def evaluate_last_n_commits(repo, message, target_dir, branch, author, n, model):
+def evaluate_last_n_commits(repo, message, target_dir, branch, author, n, model, output_format, output_dir, output_include_diff):
     try:
         commits = list(repo.iter_commits(branch, max_count=n, author=author))
         if not commits:
@@ -86,16 +88,25 @@ def evaluate_last_n_commits(repo, message, target_dir, branch, author, n, model)
 
     for commit in commits:
         display_commit_info(commit)
-        commit_diff = get_commit_diff(commit)
+        commit_diff = get_commit_diff(commit) if output_include_diff else ""
 
         evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
-        save_json_evaluation(commit, evaluation, target_dir)
+        eval_data = {
+            "hash": commit.hexsha,
+            "author": commit.author.name,
+            "email": commit.author.email,
+            "date": str(commit.committed_datetime),
+            "message": commit.message.strip(),
+            "diff": commit_diff,
+            "evaluation": evaluation
+        }
+        save_evaluation(eval_data, output_dir or target_dir, output_format)
 
         evaluated_commits.append(commit.hexsha)
 
     return evaluated_commits
 
-def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, author, model):
+def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, author, model, output_format, output_dir, output_include_diff):
     try:
         commits = list(repo.iter_commits(f'{start_commit}..{end_commit}', author=author))
     except git.exc.GitCommandError as e:
@@ -105,34 +116,49 @@ def evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_c
 
     for commit in commits:
         display_commit_info(commit)
-        commit_diff = get_commit_diff(commit)
+        commit_diff = get_commit_diff(commit) if output_include_diff else ""
 
         evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
-        save_json_evaluation(commit, evaluation, target_dir)
+        eval_data = {
+            "hash": commit.hexsha,
+            "author": commit.author.name,
+            "email": commit.author.email,
+            "date": str(commit.committed_datetime),
+            "message": commit.message.strip(),
+            "diff": commit_diff,
+            "evaluation": evaluation
+        }
+        save_evaluation(eval_data, output_dir or target_dir, output_format)
 
         evaluated_commits.append(commit.hexsha)
 
     return evaluated_commits
 
-def evaluate_all_commits(repo, message, target_dir, branch, author, model):
+def evaluate_all_commits(repo, message, target_dir, branch, author, model, output_format, output_dir, output_include_diff):
     evaluated_commits = []
 
     for commit in repo.iter_commits(branch, author=author):
         display_commit_info(commit)
-        commit_diff = get_commit_diff(commit)
+        commit_diff = get_commit_diff(commit) if output_include_diff else ""
 
         evaluation = get_openai_evaluation(commit.message, commit_diff, message, model)
-        save_json_evaluation(commit, evaluation, target_dir)
+        eval_data = {
+            "hash": commit.hexsha,
+            "author": commit.author.name,
+            "email": commit.author.email,
+            "date": str(commit.committed_datetime),
+            "message": commit.message.strip(),
+            "diff": commit_diff,
+            "evaluation": evaluation
+        }
+        save_evaluation(eval_data, output_dir or target_dir, output_format)
 
         evaluated_commits.append(commit.hexsha)
 
     return evaluated_commits
 
-def generate_summary(target_dir, summary_prompt, branch, evaluated_commits, model):
-    eval_dir = os.path.join(target_dir, '.git-evaluate')
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    summary_file_name = f"summary_{branch}_{timestamp}.json"
-    summary_file = os.path.join(eval_dir, summary_file_name)
+def generate_summary(target_dir, summary_prompt, branch, evaluated_commits, model, output_format, output_dir, output_include_diff):
+    eval_dir = os.path.join(output_dir or target_dir, '.git-evaluate')
     evaluations = []
 
     for commit_hash in evaluated_commits:
@@ -143,16 +169,13 @@ def generate_summary(target_dir, summary_prompt, branch, evaluated_commits, mode
             evaluations.append(evaluation)
 
     summary = get_openai_summary(evaluations, summary_prompt, model)
-
     summary_data = {
         "evaluations": evaluations,
         "summary": summary
     }
 
-    with open(summary_file, 'w') as f:
-        json.dump(summary_data, f, indent=4)
+    save_summary(summary_data, output_dir or target_dir, branch, output_format, output_include_diff)
 
-    console.print(f"\n[bold green]Summary saved to:[/bold green] {summary_file}")
 
 def list_branches(repo):
     branches = [head.name for head in repo.heads]

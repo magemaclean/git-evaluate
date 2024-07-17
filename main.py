@@ -1,3 +1,5 @@
+# main.py
+
 import argparse
 import os
 import git
@@ -28,10 +30,9 @@ def main():
     parser.add_argument('--summary', help='Generate a summary of all evaluations with a prompt message.')
     parser.add_argument('--model', help='Specify the model to use for evaluation (default: gpt-4o-2024-05-13)')
     parser.add_argument('--config-file', help='Path to a configuration file with OpenAI API key and other settings.')
-    parser.add_argument('--max-tokens', type=int, help='Maximum number of tokens for the OpenAI API.')
-    parser.add_argument('--include-diff', action='store_true', help='Include commit diff in the evaluation.')
     parser.add_argument('--output-format', choices=['json', 'text'], help='Format of the output evaluation file.')
-    parser.add_argument('--verbose', action='store_true', help='Enable verbose logging.')
+    parser.add_argument('--output-dir', help='Directory to save the output evaluation files.')
+    parser.add_argument('--output-include-diff', action='store_true', help='Include the commit diff in the output evaluation file.')
     
     # New query arguments
     parser.add_argument('--list-branches', action='store_true', help='List all branches in the repository.')
@@ -46,20 +47,22 @@ def main():
         config = load_config(args.config_file)
         os.environ['OPENAI_API_KEY'] = config.get('openai_api_key', os.getenv('OPENAI_API_KEY'))
         default_model = config.get('default_model', DEFAULT_MODEL)
-        max_tokens = config.get('max_tokens', None)
-        include_diff = config.get('include_diff', False)
         output_format = config.get('output_format', 'json')
-        verbose = config.get('verbose', False)
         target_dir = config.get('target_dir', None)
         message = config.get('message', None)
         summary = config.get('summary', None)
         evaluate = config.get('evaluate', None)
+        output_dir = config.get('output_dir', None)
+        output_include_diff = config.get('output_include_diff', False)
     else:
         default_model = DEFAULT_MODEL
+        output_format = 'json'
         target_dir = None
         message = None
         summary = None
         evaluate = None
+        output_dir = None
+        output_include_diff = False
 
     # Override config settings with command-line arguments if provided
     if args.model:
@@ -72,6 +75,12 @@ def main():
         summary = args.summary
     if args.evaluate:
         evaluate = args.evaluate
+    if args.output_format:
+        output_format = args.output_format
+    if args.output_dir:
+        output_dir = args.output_dir
+    if args.output_include_diff:
+        output_include_diff = args.output_include_diff
 
     # Validate required arguments for evaluation
     if not target_dir:
@@ -134,21 +143,21 @@ def main():
     try:
         # Evaluate commits based on the provided arguments
         if evaluate == 'all':
-            evaluated_commits = evaluate_all_commits(repo, message, target_dir, branch, args.author, default_model)
+            evaluated_commits = evaluate_all_commits(repo, message, target_dir, branch, args.author, default_model, output_format, output_dir, output_include_diff)
         elif evaluate.startswith('last:'):
             n = int(evaluate.split(':')[1])
-            evaluated_commits = evaluate_last_n_commits(repo, message, target_dir, branch, args.author, n, default_model)
+            evaluated_commits = evaluate_last_n_commits(repo, message, target_dir, branch, args.author, n, default_model, output_format, output_dir, output_include_diff)
         elif evaluate == 'last':
-            evaluated_commits = evaluate_last_commit(repo, message, target_dir, branch, args.author, default_model)
+            evaluated_commits = evaluate_last_commit(repo, message, target_dir, branch, args.author, default_model, output_format, output_dir, output_include_diff)
         elif ':' in evaluate:
             start_commit, end_commit = evaluate.split(':')
-            evaluated_commits = evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, args.author, default_model)
+            evaluated_commits = evaluate_commit_range(repo, message, target_dir, branch, start_commit, end_commit, args.author, default_model, output_format, output_dir, output_include_diff)
         else:
-            evaluated_commits = evaluate_specific_commit(repo, message, target_dir, branch, evaluate, args.author, default_model)
+            evaluated_commits = evaluate_specific_commit(repo, message, target_dir, branch, evaluate, args.author, default_model, output_format, output_dir, output_include_diff)
         
         # Generate a summary if the option is provided
         if summary:
-            generate_summary(target_dir, summary, branch, evaluated_commits, default_model)
+            generate_summary(target_dir, summary, branch, evaluated_commits, default_model, output_format, output_dir, output_include_diff)
         
     except ValueError as ve:
         console.print(Panel(f"[bold red]ValueError:[/bold red] {ve}", title="Error", subtitle="Please check your input"))
